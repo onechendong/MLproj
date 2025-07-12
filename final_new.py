@@ -84,7 +84,6 @@ class Passenger(object):
     def getFeatures(self): 
         return self.featureVec 
 
-
 def buildTitanicExamples(fileName): 
     # data, maleTime, FemaleTime = getBMData(fileName)
     data = getBMData(fileName)
@@ -93,7 +92,6 @@ def buildTitanicExamples(fileName):
         a = Passenger(data['cabin'][i], data['age'][i], data['gender'][i], data['survived'][i]) 
         examples.append(a)
     return examples 
- 
 
 def makeHist(data_all, data_s, data_n, bins, title, xLabel, yLabel, gender):
     all = [p.getAge() for p in data_all]
@@ -131,11 +129,11 @@ def makeClassHist(data_s, data_n, title, xLabel, yLabel):
     pylab.tight_layout()
     pylab.show()
 
-def makeAccurHist(data, title, xLabel, yLabel, label):
+def makeAccurHist(data, title, xLabel, yLabel, label, bins):
     mean = sum(data) / len(data)
     std = stdDev(data)
     pylab.figure(figsize=(8, 5))
-    pylab.hist(data, bins=15, edgecolor='black', color='steelblue', 
+    pylab.hist(data, bins=bins, edgecolor='black', color='steelblue', 
                label=[
             f'{label}\nMean = {mean:.2f}, SD={std:.2f}'
         ])
@@ -146,16 +144,16 @@ def makeAccurHist(data, title, xLabel, yLabel, label):
     pylab.tight_layout()
     pylab.show()
 
-def plot_mean_accuracy_vs_k(ks, mean_accuracies, title):
+def plot_mean_accuracy_vs_k(ks, mean_accuracies, title, kMax):
     best_mean_acc = max(mean_accuracies)
     best_k = ks[mean_accuracies.index(best_mean_acc)]
     pylab.figure(figsize=(8, 5))
-    pylab.plot(ks, mean_accuracies, color='steelblue', label='Mean Accuracies of thresholds ks(0.5, 0.65)')
+    pylab.plot(ks, mean_accuracies, color='steelblue', label=f'Mean Accuracies of thresholds ks(0.5, {kMax})')
     pylab.scatter([best_k], [best_mean_acc], color='red', label='Maximum Mean Accuracy')
     pylab.annotate(f'({best_k:.3f}, {best_mean_acc:.3f})',xy=(best_k, best_mean_acc),
                    xytext=(best_k + 0.003, best_mean_acc + 0.000),fontsize=10)    
     pylab.title(title)
-    pylab.xlabel('Threshold Value ks between 0.5 to 0.65')
+    pylab.xlabel(f'Threshold Value ks between 0.5 to {kMax}')
     pylab.ylabel('Accuracy')
     pylab.legend()
     pylab.tight_layout()
@@ -355,10 +353,10 @@ def iScaleExamples(examples):
         scaled_data.append(scaled_p)
     return scaled_data
 
-def run_1000_trials(examples):
+def run_1000_trials(examples, kMax):
     weights_list = [[], [], [], [], []]
-    intercepts, accuracies, sensitivities, specificities, ppvs, aurocs = [], [], [], [], [], []
-    ks = [round(0.5 + t * (0.65 - 0.5) / 999, 5) for t in range(1000)]
+    intercepts, accuracies, sensitivities, specificities,ppvs, aurocs = [], [], [], [], [], []
+    ks = [round(0.5 + t * (kMax - 0.5) / 999, 5) for t in range(1000)]
     accuracies_max, best_k_value = [], []
     accuracy_per_k = [[] for _ in range(1000)]
     mean_accuracy_per_k = []
@@ -376,7 +374,7 @@ def run_1000_trials(examples):
             truePos_k, falsePos_k, trueNeg_k, falseNeg_k = applyModel(model, X_test, y_test, 1, k)
             accur_diff = accuracy(truePos_k, falsePos_k, trueNeg_k, falseNeg_k)
             accuracies_diff_k.append(accur_diff)
-            accuracy_per_k[idx].append(accur_diff) # idx=0 --> k=0.5, idx=999 --> k=0.65
+            accuracy_per_k[idx].append(accur_diff) # idx=0 --> k=0.5, idx=999 --> k=kMax
         max_accur = max(accuracies_diff_k)
         best_k = ks[accuracies_diff_k.index(max_accur)]
         accuracies_max.append(max_accur)
@@ -435,41 +433,115 @@ makeClassHist(survived_fdata, not_survived_fdata, 'Female Cabin Classes VS Survi
               , 'Female Cabin Classes', 'Number of Female Passengers')
 
 # 3
-run_results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept = run_1000_trials(examples)
+run_results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept = run_1000_trials(examples, 0.65)
 print("\nLogistic Regression:\nAverages for all examples 1000 trials with threshold k=0.5")
 for key, (mean, ci) in run_results.items():
     print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
 
 makeAccurHist(accuracies_max, 'Maximum Accuracies', 'Maximum Accuracies', 
-              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits')
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 15)
 makeAccurHist(best_k_value, 'Threshold Values k for Maximum Accuracies', 
-              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies')
-_ = plot_mean_accuracy_vs_k(ks, mean_accuracy_per_k, 'Mean Accuracy for Different Threshold k Values')
+              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies', 15)
+_ = plot_mean_accuracy_vs_k(ks, mean_accuracy_per_k, 'Mean Accuracy for Different Threshold k Values', 0.65)
 plot_mean_roc_curve(mean_weights, mean_intercept, examples, 'ROC with Mean Weights and Intercepts')
 
 # 4 zScaling
 z_examples = zScaleExamples(examples)
-z_run_results, z_accuracies_max, z_best_k_value, z_mean_accuracy_per_k, z_ks, z_mean_weights, z_mean_intercept = run_1000_trials(z_examples)
+z_run_results, z_accuracies_max, z_best_k_value, z_mean_accuracy_per_k, z_ks, z_mean_weights, z_mean_intercept = run_1000_trials(z_examples, 0.65)
 print("\nLogistic Regression with zScaling:\nAverages for all examples (zScaling) 1000 trials with threshold k=0.5")
 for key, (mean, ci) in z_run_results.items():
     print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
 makeAccurHist(z_accuracies_max, '(zScaling) Maximum Accuracies', 'Maximum Accuracies', 
-              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits')
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 15)
 makeAccurHist(z_best_k_value, '(zScaling) Threshold Values k for Maximum Accuracies', 
-              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies')
-_ = plot_mean_accuracy_vs_k(z_ks, z_mean_accuracy_per_k, '(zScaling) Mean Accuracy for Different Threshold k Values')
+              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies', 15)
+_ = plot_mean_accuracy_vs_k(z_ks, z_mean_accuracy_per_k, '(zScaling) Mean Accuracy for Different Threshold k Values', 0.65)
 plot_mean_roc_curve(z_mean_weights, z_mean_intercept, z_examples, '(zScaling) ROC with Mean Weights and Intercepts')
 
 # 4 iScaling
 i_examples = iScaleExamples(examples)
-i_run_results, i_accuracies_max, i_best_k_value, i_mean_accuracy_per_k, i_ks, i_mean_weights, i_mean_intercept = run_1000_trials(i_examples)
+i_run_results, i_accuracies_max, i_best_k_value, i_mean_accuracy_per_k, i_ks, i_mean_weights, i_mean_intercept = run_1000_trials(i_examples, 0.65)
 print("\nLogistic Regression with iScaling:\nAverages for all examples (iScaling) 1000 trials with threshold k=0.5")
 for key, (mean, ci) in i_run_results.items():
     print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
 makeAccurHist(i_accuracies_max, '(iScaling) Maximum Accuracies', 'Maximum Accuracies', 
-              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits')
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 15)
 makeAccurHist(i_best_k_value, '(iScaling) Threshold Values k for Maximum Accuracies', 
-              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies')
-i_best_k = plot_mean_accuracy_vs_k(i_ks, i_mean_accuracy_per_k, '(iScaling) Mean Accuracy for Different Threshold k Values')
+              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies', 15)
+i_best_k = plot_mean_accuracy_vs_k(i_ks, i_mean_accuracy_per_k, '(iScaling) Mean Accuracy for Different Threshold k Values', 0.65)
 plot_mean_roc_curve(i_mean_weights, i_mean_intercept, i_examples, '(iScaling) ROC with Mean Weights and Intercepts')
 print(f'(iScaling) statistics for mean maximum threshold k= {i_best_k:.3f}')
+
+# 5 
+# male
+m_run_results, m_accuracies_max, m_best_k_value, m_mean_accuracy_per_k, m_ks, m_mean_weights, m_mean_intercept = run_1000_trials(male_data, 0.75)
+print("\nLogistic Regression With Male And Female Separated:\nAverages for Male Examples 1000 trials with threshold k=0.5")
+for key, (mean, ci) in m_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(m_accuracies_max, 'Male: Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 25)
+makeAccurHist(m_best_k_value, 'Male: Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.75', 'Numbers of ks', 'k Values for Maximum Accuracies', 25)
+_ = plot_mean_accuracy_vs_k(m_ks, m_mean_accuracy_per_k, 'Male: Mean Accuracy for Different Threshold k Values', 0.75)
+plot_mean_roc_curve(m_mean_weights, m_mean_intercept, male_data, 'Male: ROC with Mean Weights and Intercepts')
+# female
+f_run_results, f_accuracies_max, f_best_k_value, f_mean_accuracy_per_k, f_ks, f_mean_weights, f_mean_intercept = run_1000_trials(female_data, 0.75)
+print("\nAverages for Female Examples 1000 trials with threshold k=0.5")
+for key, (mean, ci) in f_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(f_accuracies_max, 'Female: Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 25)
+makeAccurHist(f_best_k_value, 'Female: Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.75', 'Numbers of ks', 'k Values for Maximum Accuracies', 25)
+_ = plot_mean_accuracy_vs_k(f_ks, f_mean_accuracy_per_k, 'Female: Mean Accuracy for Different Threshold k Values', 0.75)
+plot_mean_roc_curve(f_mean_weights, f_mean_intercept, female_data, 'Female: ROC with Mean Weights and Intercepts')
+
+# male zScaling
+z_male_data = zScaleExamples(male_data)
+zm_run_results, zm_accuracies_max, zm_best_k_value, zm_mean_accuracy_per_k, zm_ks, zm_mean_weights, zm_mean_intercept = run_1000_trials(z_male_data, 0.75)
+print("\n(zScaling) Logistic Regression With Male And Female Separated:\nAverages for Male Examples 1000 trials with threshold k=0.5")
+for key, (mean, ci) in zm_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(zm_accuracies_max, '(zScaling) Male: Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 25)
+makeAccurHist(zm_best_k_value, '(zScaling) Male: Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.75', 'Numbers of ks', 'k Values for Maximum Accuracies', 25)
+_ = plot_mean_accuracy_vs_k(zm_ks, zm_mean_accuracy_per_k, '(zScaling) Male: Mean Accuracy for Different Threshold k Values', 0.75)
+plot_mean_roc_curve(zm_mean_weights, zm_mean_intercept, z_male_data, '(zScaling) Male: ROC with Mean Weights and Intercepts')
+# female zScaling
+z_female_data = zScaleExamples(female_data)
+zf_run_results, zf_accuracies_max, zf_best_k_value, zf_mean_accuracy_per_k, zf_ks, zf_mean_weights, zf_mean_intercept = run_1000_trials(z_female_data, 0.75)
+print("\nAverages for Female Examples 1000 trials with threshold k=0.5")
+for key, (mean, ci) in zf_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(zf_accuracies_max, '(zScaling) Female: Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 25)
+makeAccurHist(zf_best_k_value, '(zScaling) Female: Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.75', 'Numbers of ks', 'k Values for Maximum Accuracies', 25)
+_ = plot_mean_accuracy_vs_k(zf_ks, zf_mean_accuracy_per_k, '(zScaling) Female: Mean Accuracy for Different Threshold k Values', 0.75)
+plot_mean_roc_curve(zf_mean_weights, zf_mean_intercept, z_female_data, '(zScaling) Female: ROC with Mean Weights and Intercepts')
+
+# male iScaling
+i_male_data = iScaleExamples(male_data)
+im_run_results, im_accuracies_max, im_best_k_value, im_mean_accuracy_per_k, im_ks, im_mean_weights, im_mean_intercept = run_1000_trials(i_male_data, 0.75)
+print("\n(iScaling) Logistic Regression With Male And Female Separated:\nAverages for Male Examples 1000 trials with threshold k=0.5")
+for key, (mean, ci) in im_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(im_accuracies_max, '(iScaling) Male: Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 25)
+makeAccurHist(im_best_k_value, '(iScaling) Male: Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.75', 'Numbers of ks', 'k Values for Maximum Accuracies', 25)
+_ = plot_mean_accuracy_vs_k(im_ks, im_mean_accuracy_per_k, '(iScaling) Male: Mean Accuracy for Different Threshold k Values', 0.75)
+plot_mean_roc_curve(im_mean_weights, im_mean_intercept, i_male_data, '(iScaling) Male: ROC with Mean Weights and Intercepts')
+# female iScaling
+i_female_data = iScaleExamples(female_data)
+if_run_results, if_accuracies_max, if_best_k_value, if_mean_accuracy_per_k, if_ks, if_mean_weights, if_mean_intercept = run_1000_trials(i_female_data, 0.75)
+print("\nAverages for Female Examples 1000 trials with threshold k=0.5")
+for key, (mean, ci) in if_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(if_accuracies_max, '(iScaling) Female: Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits', 25)
+makeAccurHist(if_best_k_value, '(iScaling) Female: Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.75', 'Numbers of ks', 'k Values for Maximum Accuracies', 25)
+_ = plot_mean_accuracy_vs_k(if_ks, if_mean_accuracy_per_k, '(iScaling) Female: Mean Accuracy for Different Threshold k Values', 0.75)
+plot_mean_roc_curve(if_mean_weights, if_mean_intercept, i_female_data, '(iScaling) Female: ROC with Mean Weights and Intercepts')
