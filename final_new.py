@@ -84,8 +84,6 @@ class Passenger(object):
     def getFeatures(self): 
         return self.featureVec 
 
-    # def __str__ (self): 
-    #     return str(self.getAge()) + ', ' + str(self.getTime()) + ', ' + self.label
 
 def buildTitanicExamples(fileName): 
     # data, maleTime, FemaleTime = getBMData(fileName)
@@ -148,7 +146,7 @@ def makeAccurHist(data, title, xLabel, yLabel, label):
     pylab.tight_layout()
     pylab.show()
 
-def plot_mean_accuracy_vs_k(ks, mean_accuracies):
+def plot_mean_accuracy_vs_k(ks, mean_accuracies, title):
     best_mean_acc = max(mean_accuracies)
     best_k = ks[mean_accuracies.index(best_mean_acc)]
     pylab.figure(figsize=(8, 5))
@@ -156,12 +154,13 @@ def plot_mean_accuracy_vs_k(ks, mean_accuracies):
     pylab.scatter([best_k], [best_mean_acc], color='red', label='Maximum Mean Accuracy')
     pylab.annotate(f'({best_k:.3f}, {best_mean_acc:.3f})',xy=(best_k, best_mean_acc),
                    xytext=(best_k + 0.003, best_mean_acc + 0.000),fontsize=10)    
-    pylab.title('Mean Accuracy for Different Threshold k Values')
+    pylab.title(title)
     pylab.xlabel('Threshold Value ks between 0.5 to 0.65')
     pylab.ylabel('Accuracy')
     pylab.legend()
     pylab.tight_layout()
     pylab.show()
+    return best_k
 
 def gender_split(data):    
     female_data = []
@@ -290,7 +289,7 @@ def compute_auroc(y_true, y_scores, pos_label=1):
         auroc += (FPRs[i] - FPRs[i - 1]) * (TPRs[i] + TPRs[i - 1]) / 2
     return auroc
 
-def plot_mean_roc_curve(mean_weights, mean_intercept, examples):
+def plot_mean_roc_curve(mean_weights, mean_intercept, examples, title):
     X_test, y_test = data_convert(examples)
     y_scores = []
     for features in X_test:
@@ -322,10 +321,39 @@ def plot_mean_roc_curve(mean_weights, mean_intercept, examples):
     pylab.plot([0, 1], [0, 1], linestyle='--', color='orange')
     pylab.xlabel('1 - Specificity - False Positive Rate')
     pylab.ylabel('Sensitivity - True Positive Rate')
-    pylab.title(f'ROC with Mean Weights and Intercepts (AUROC = {auroc:.3f})')
-    pylab.legend()
+    pylab.title(f'{title} (AUROC = {auroc:.3f})')
     pylab.tight_layout()
     pylab.show()
+
+def zScaleExamples(examples):
+    ages = [p.getAge() for p in examples]
+    mean_age = sum(ages) / len(ages)
+    std_age = stdDev(ages)
+    scaled_data = []
+    for p in examples:
+        cabin = p.getCabin()
+        gender = p.getGender()
+        label = p.getLabel()
+        age = p.getAge()
+        z_scaled_age = (age - mean_age) / std_age
+        scaled_p = Passenger(cabin, z_scaled_age, gender, label)
+        scaled_data.append(scaled_p)
+    return scaled_data
+
+def iScaleExamples(examples):
+    ages = [p.getAge() for p in examples]
+    min_age = min(ages)
+    max_age = max(ages)
+    scaled_data = []
+    for p in examples:
+        cabin = p.getCabin()
+        gender = p.getGender()
+        label = p.getLabel()
+        age = p.getAge()
+        i_scaled_age = (age - min_age) / (max_age - min_age)
+        scaled_p = Passenger(cabin, i_scaled_age, gender, label)
+        scaled_data.append(scaled_p)
+    return scaled_data
 
 def run_1000_trials(examples):
     weights_list = [[], [], [], [], []]
@@ -395,20 +423,20 @@ survived_mdata, not_survived_mdata = survived_split(male_data)
 survived_fdata, not_survived_fdata = survived_split(female_data)
 
 # Survived Male/Female Passengers VS Ages
-# makeHist(male_data, survived_mdata, not_survived_mdata, 20, 'Survived Male Passengers VS Ages'
-#          , 'Male Ages', 'Number of Male Passengers', 'Male')
-# makeHist(female_data, survived_fdata, not_survived_fdata, 20, 'Survived Female Passengers VS Ages'
-#          , 'Female Ages', 'Number of Female Passengers', 'Female')
+makeHist(male_data, survived_mdata, not_survived_mdata, 20, 'Survived Male Passengers VS Ages'
+         , 'Male Ages', 'Number of Male Passengers', 'Male')
+makeHist(female_data, survived_fdata, not_survived_fdata, 20, 'Survived Female Passengers VS Ages'
+         , 'Female Ages', 'Number of Female Passengers', 'Female')
 
-# # Male/Female Cabin Classes VS Survived
-# makeClassHist(survived_mdata, not_survived_mdata, 'Male Cabin Classes VS Survived'
-#               , 'Male Cabin Classes', 'Number of Male Passengers')
-# makeClassHist(survived_fdata, not_survived_fdata, 'Female Cabin Classes VS Survived'
-#               , 'Female Cabin Classes', 'Number of Female Passengers')
+# Male/Female Cabin Classes VS Survived
+makeClassHist(survived_mdata, not_survived_mdata, 'Male Cabin Classes VS Survived'
+              , 'Male Cabin Classes', 'Number of Male Passengers')
+makeClassHist(survived_fdata, not_survived_fdata, 'Female Cabin Classes VS Survived'
+              , 'Female Cabin Classes', 'Number of Female Passengers')
 
 # 3
 run_results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept = run_1000_trials(examples)
-print("Logistic Regression:\nAverages for all examples 1000 trials with threshold k=0.5")
+print("\nLogistic Regression:\nAverages for all examples 1000 trials with threshold k=0.5")
 for key, (mean, ci) in run_results.items():
     print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
 
@@ -416,9 +444,32 @@ makeAccurHist(accuracies_max, 'Maximum Accuracies', 'Maximum Accuracies',
               'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits')
 makeAccurHist(best_k_value, 'Threshold Values k for Maximum Accuracies', 
               'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies')
-plot_mean_accuracy_vs_k(ks, mean_accuracy_per_k)
-plot_mean_roc_curve(mean_weights, mean_intercept, examples)
+_ = plot_mean_accuracy_vs_k(ks, mean_accuracy_per_k, 'Mean Accuracy for Different Threshold k Values')
+plot_mean_roc_curve(mean_weights, mean_intercept, examples, 'ROC with Mean Weights and Intercepts')
 
+# 4 zScaling
+z_examples = zScaleExamples(examples)
+z_run_results, z_accuracies_max, z_best_k_value, z_mean_accuracy_per_k, z_ks, z_mean_weights, z_mean_intercept = run_1000_trials(z_examples)
+print("\nLogistic Regression with zScaling:\nAverages for all examples (zScaling) 1000 trials with threshold k=0.5")
+for key, (mean, ci) in z_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(z_accuracies_max, '(zScaling) Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits')
+makeAccurHist(z_best_k_value, '(zScaling) Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies')
+_ = plot_mean_accuracy_vs_k(z_ks, z_mean_accuracy_per_k, '(zScaling) Mean Accuracy for Different Threshold k Values')
+plot_mean_roc_curve(z_mean_weights, z_mean_intercept, z_examples, '(zScaling) ROC with Mean Weights and Intercepts')
 
-
-
+# 4 iScaling
+i_examples = iScaleExamples(examples)
+i_run_results, i_accuracies_max, i_best_k_value, i_mean_accuracy_per_k, i_ks, i_mean_weights, i_mean_intercept = run_1000_trials(i_examples)
+print("\nLogistic Regression with iScaling:\nAverages for all examples (iScaling) 1000 trials with threshold k=0.5")
+for key, (mean, ci) in i_run_results.items():
+    print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+makeAccurHist(i_accuracies_max, '(iScaling) Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits')
+makeAccurHist(i_best_k_value, '(iScaling) Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies')
+i_best_k = plot_mean_accuracy_vs_k(i_ks, i_mean_accuracy_per_k, '(iScaling) Mean Accuracy for Different Threshold k Values')
+plot_mean_roc_curve(i_mean_weights, i_mean_intercept, i_examples, '(iScaling) ROC with Mean Weights and Intercepts')
+print(f'(iScaling) statistics for mean maximum threshold k= {i_best_k:.3f}')
