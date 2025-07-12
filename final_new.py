@@ -133,6 +133,36 @@ def makeClassHist(data_s, data_n, title, xLabel, yLabel):
     pylab.tight_layout()
     pylab.show()
 
+def makeAccurHist(data, title, xLabel, yLabel, label):
+    mean = sum(data) / len(data)
+    std = stdDev(data)
+    pylab.figure(figsize=(8, 5))
+    pylab.hist(data, bins=15, edgecolor='black', color='steelblue', 
+               label=[
+            f'{label}\nMean = {mean:.2f}, SD={std:.2f}'
+        ])
+    pylab.xlabel(xLabel)
+    pylab.ylabel(yLabel)
+    pylab.title(title)
+    pylab.legend()
+    pylab.tight_layout()
+    pylab.show()
+
+def plot_mean_accuracy_vs_k(ks, mean_accuracies):
+    best_mean_acc = max(mean_accuracies)
+    best_k = ks[mean_accuracies.index(best_mean_acc)]
+    pylab.figure(figsize=(8, 5))
+    pylab.plot(ks, mean_accuracies, color='steelblue', label='Mean Accuracies of thresholds ks(0.5, 0.65)')
+    pylab.scatter([best_k], [best_mean_acc], color='red', label='Maximum Mean Accuracy')
+    pylab.annotate(f'({best_k:.3f}, {best_mean_acc:.3f})',xy=(best_k, best_mean_acc),
+                   xytext=(best_k + 0.003, best_mean_acc + 0.000),fontsize=10)    
+    pylab.title('Mean Accuracy for Different Threshold k Values')
+    pylab.xlabel('Threshold Value ks between 0.5 to 0.65')
+    pylab.ylabel('Accuracy')
+    pylab.legend()
+    pylab.tight_layout()
+    pylab.show()
+
 def gender_split(data):    
     female_data = []
     male_data = []
@@ -188,6 +218,7 @@ def accuracy(truePos, falsePos, trueNeg, falseNeg):
     numerator = truePos + trueNeg 
     denominator = truePos + trueNeg + falsePos + falseNeg 
     return numerator/denominator 
+
 def sensitivity(truePos, falseNeg): 
     try: 
         return truePos/(truePos + falseNeg) 
@@ -259,10 +290,51 @@ def compute_auroc(y_true, y_scores, pos_label=1):
         auroc += (FPRs[i] - FPRs[i - 1]) * (TPRs[i] + TPRs[i - 1]) / 2
     return auroc
 
+def plot_mean_roc_curve(mean_weights, mean_intercept, examples):
+    X_test, y_test = data_convert(examples)
+    y_scores = []
+    for features in X_test:
+        linear_comb = sum(w * x for w, x in zip(mean_weights, features)) + mean_intercept
+        prob = 1 / (1 + math.exp(-linear_comb))
+        y_scores.append(prob)
+    thresholds = sorted(set(y_scores), reverse=True)
+    TPRs, FPRs = [], []
+    P = sum(1 for y in y_test if y == 1)
+    N = len(y_test) - P
+    for thresh in thresholds:
+        tp = fp = 0
+        for i in range(len(y_test)):
+            if y_scores[i] >= thresh:
+                if y_test[i] == 1:
+                    tp += 1
+                else:
+                    fp += 1
+        TPR = tp / P if P else 0
+        FPR = fp / N if N else 0
+        TPRs.append(TPR)
+        FPRs.append(FPR)
+    auroc = 0.0
+    for i in range(1, len(TPRs)):
+        auroc += (FPRs[i] - FPRs[i - 1]) * (TPRs[i] + TPRs[i - 1]) / 2
+
+    pylab.figure(figsize=(8, 5))
+    pylab.plot(FPRs, TPRs, color='steelblue')
+    pylab.plot([0, 1], [0, 1], linestyle='--', color='orange')
+    pylab.xlabel('1 - Specificity - False Positive Rate')
+    pylab.ylabel('Sensitivity - True Positive Rate')
+    pylab.title(f'ROC with Mean Weights and Intercepts (AUROC = {auroc:.3f})')
+    pylab.legend()
+    pylab.tight_layout()
+    pylab.show()
 
 def run_1000_trials(examples):
     weights_list = [[], [], [], [], []]
     intercepts, accuracies, sensitivities, specificities, ppvs, aurocs = [], [], [], [], [], []
+    ks = [round(0.5 + t * (0.65 - 0.5) / 999, 5) for t in range(1000)]
+    accuracies_max, best_k_value = [], []
+    accuracy_per_k = [[] for _ in range(1000)]
+    mean_accuracy_per_k = []
+    mean_weights = []
 
     for i in range(1000):
         train, test = divide80_20(examples)
@@ -270,6 +342,18 @@ def run_1000_trials(examples):
         X_test, y_test = data_convert(test)
         model = sklearn.linear_model.LogisticRegression().fit(X_train, y_train)
         truePos, falsePos, trueNeg, falseNeg = applyModel(model, X_test, y_test, 1, 0.5)
+
+        accuracies_diff_k = []
+        for idx, k in enumerate(ks):
+            truePos_k, falsePos_k, trueNeg_k, falseNeg_k = applyModel(model, X_test, y_test, 1, k)
+            accur_diff = accuracy(truePos_k, falsePos_k, trueNeg_k, falseNeg_k)
+            accuracies_diff_k.append(accur_diff)
+            accuracy_per_k[idx].append(accur_diff) # idx=0 --> k=0.5, idx=999 --> k=0.65
+        max_accur = max(accuracies_diff_k)
+        best_k = ks[accuracies_diff_k.index(max_accur)]
+        accuracies_max.append(max_accur)
+        best_k_value.append(best_k)
+
         y_probs = list(model.predict_proba(X_test)[:, 1])
         auroc = compute_auroc(y_test, y_probs)
         aurocs.append(auroc)
@@ -283,18 +367,23 @@ def run_1000_trials(examples):
             weights_list[i].append(coef[i])
         intercepts.append(model.intercept_[0])
 
+    for acc_list in accuracy_per_k:
+        mean_accuracy_per_k.append(sum(acc_list)/len(acc_list))
+
     results = {}
     feature_names = ['C1', 'C2', 'C3', 'age', 'gender']
     for i in range(5):
         mean, ci = mean_confidence_interval(weights_list[i])
+        mean_weights.append(mean)
         results[f'Mean weight of {feature_names[i]}'] = (mean, ci)
-    results['Mean intercept of fitted model'] = mean_confidence_interval(intercepts)
+    mean_intercept, ci_intercept = mean_confidence_interval(intercepts)
+    results['Mean intercept of fitted model'] = mean_intercept, ci_intercept
     results['Mean accuracy'] = mean_confidence_interval(accuracies)
     results['Mean sensitivity'] = mean_confidence_interval(sensitivities)
     results['Mean specificity'] = mean_confidence_interval(specificities)
     results['Mean pos.pred.val.'] = mean_confidence_interval(ppvs)
     results['Mean AUROC'] = mean_confidence_interval(aurocs)
-    return results
+    return results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept
 
 
 
@@ -306,21 +395,30 @@ survived_mdata, not_survived_mdata = survived_split(male_data)
 survived_fdata, not_survived_fdata = survived_split(female_data)
 
 # Survived Male/Female Passengers VS Ages
-makeHist(male_data, survived_mdata, not_survived_mdata, 20, 'Survived Male Passengers VS Ages'
-         , 'Male Ages', 'Number of Male Passengers', 'Male')
-makeHist(female_data, survived_fdata, not_survived_fdata, 20, 'Survived Female Passengers VS Ages'
-         , 'Female Ages', 'Number of Female Passengers', 'Female')
+# makeHist(male_data, survived_mdata, not_survived_mdata, 20, 'Survived Male Passengers VS Ages'
+#          , 'Male Ages', 'Number of Male Passengers', 'Male')
+# makeHist(female_data, survived_fdata, not_survived_fdata, 20, 'Survived Female Passengers VS Ages'
+#          , 'Female Ages', 'Number of Female Passengers', 'Female')
 
-# Male/Female Cabin Classes VS Survived
-makeClassHist(survived_mdata, not_survived_mdata, 'Male Cabin Classes VS Survived'
-              , 'Male Cabin Classes', 'Number of Male Passengers')
-makeClassHist(survived_fdata, not_survived_fdata, 'Female Cabin Classes VS Survived'
-              , 'Female Cabin Classes', 'Number of Female Passengers')
+# # Male/Female Cabin Classes VS Survived
+# makeClassHist(survived_mdata, not_survived_mdata, 'Male Cabin Classes VS Survived'
+#               , 'Male Cabin Classes', 'Number of Male Passengers')
+# makeClassHist(survived_fdata, not_survived_fdata, 'Female Cabin Classes VS Survived'
+#               , 'Female Cabin Classes', 'Number of Female Passengers')
 
 # 3
-run_results = run_1000_trials(examples)
+run_results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept = run_1000_trials(examples)
 print("Logistic Regression:\nAverages for all examples 1000 trials with threshold k=0.5")
 for key, (mean, ci) in run_results.items():
     print(f" {key} = {mean:.3f}, 95% confidence interval = {ci:.3f}")
+
+makeAccurHist(accuracies_max, 'Maximum Accuracies', 'Maximum Accuracies', 
+              'Numbers of Maximum Accuracies', 'Maximum Accuracies for 1000 splits')
+makeAccurHist(best_k_value, 'Threshold Values k for Maximum Accuracies', 
+              'Thresholds Values ks Between 0.5 and 0.65', 'Numbers of ks', 'k Values for Maximum Accuracies')
+plot_mean_accuracy_vs_k(ks, mean_accuracy_per_k)
+plot_mean_roc_curve(mean_weights, mean_intercept, examples)
+
+
 
 
