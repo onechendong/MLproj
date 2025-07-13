@@ -1,3 +1,4 @@
+from gettext import find
 import pylab
 import random
 import math
@@ -411,8 +412,61 @@ def run_1000_trials(examples, kMax):
     results['Mean AUROC'] = mean_confidence_interval(aurocs)
     return results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept
 
+def euclidean_dist(x1, x2):
+    return sum((a - b) ** 2 for a, b in zip(x1, x2)) ** 0.5
 
+def findKNearest_vec(example, exampleSet, k):
+    distances = [euclidean_dist(example, train_ex) for train_ex in exampleSet]
+    k_indices = sorted(range(len(distances)), key=lambda i: distances[i])[:k]
+    return k_indices, [distances[i] for i in k_indices]
 
+def KNearestClassify_vec(X_train, y_train, X_test, y_test, label, k):
+    truePos, falsePos, trueNeg, falseNeg = 0, 0, 0, 0
+    for xi, true_label in zip(X_test, y_test):
+        nearest_indices, _ = findKNearest_vec(xi, X_train, k)
+        vote = sum(1 for i in nearest_indices if y_train[i] == label)
+        if vote > k // 2:
+            if true_label == label:
+                truePos += 1
+            else:
+                falsePos += 1
+        else:
+            if true_label != label:
+                trueNeg += 1
+            else:
+                falseNeg += 1
+    return truePos, falsePos, trueNeg, falseNeg
+
+def confusionMatrix(truePos, falsePos, trueNeg, falseNeg):
+    # print('\nk = ', k)
+    print(f'TP,FP,TN,FN = {truePos} {falsePos} {trueNeg} {falseNeg}')
+    print('                     ', 'TP', '\t', 'FP' )
+    print('Confusion Matrix is: ', truePos,'\t', falsePos)
+    print('                     ', trueNeg,'\t', falseNeg)
+    print('                     ', 'TN', '\t', 'FN')    
+    # getStats(truePos, falsePos, trueNeg, falseNeg)
+    return
+
+def findK_vec(X, y, minK, maxK, numFolds, label):
+    accuracies = []
+    data = list(zip(X, y))
+    for k in range(minK, maxK + 1, 2):
+        score = 0.0
+        for _ in range(numFolds):
+            fold = random.sample(data, min(5000, len(data)))
+            fold_X = [f[0] for f in fold]
+            fold_y = [f[1] for f in fold]
+            split = int(0.8 * len(fold))
+            X_train, y_train = fold_X[:split], fold_y[:split]
+            X_test, y_test = fold_X[split:], fold_y[split:]
+
+            tp, fp, tn, fn = KNearestClassify_vec(X_train, y_train, X_test, y_test, label, k)
+            acc = accuracy(tp, fp, tn, fn)
+            score += acc
+
+        avg_acc = score / numFolds
+        accuracies.append(avg_acc)
+    return accuracies
 
 # --- main ---
 examples = buildTitanicExamples('TitanicPassengers.txt')
@@ -432,6 +486,7 @@ makeClassHist(survived_mdata, not_survived_mdata, 'Male Cabin Classes VS Survive
 makeClassHist(survived_fdata, not_survived_fdata, 'Female Cabin Classes VS Survived'
               , 'Female Cabin Classes', 'Number of Female Passengers')
 
+# --- logis c regression ---
 # 3
 run_results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept = run_1000_trials(examples, 0.65)
 print("\nLogistic Regression:\nAverages for all examples 1000 trials with threshold k=0.5")
@@ -545,3 +600,51 @@ makeAccurHist(if_best_k_value, '(iScaling) Female: Threshold Values k for Maximu
               'Thresholds Values ks Between 0.5 and 0.75', 'Numbers of ks', 'k Values for Maximum Accuracies', 25)
 _ = plot_mean_accuracy_vs_k(if_ks, if_mean_accuracy_per_k, '(iScaling) Female: Mean Accuracy for Different Threshold k Values', 0.75)
 plot_mean_roc_curve(if_mean_weights, if_mean_intercept, i_female_data, '(iScaling) Female: ROC with Mean Weights and Intercepts')
+
+
+# --- kNN ---
+# Note:
+# This section only performs a single 80/20 train-test split, so the results may vary quite a bit.
+# Given the small dataset size (~1046 examples), a single split might not reflect the model’s true performance.
+# For more reliable results, it would be better to repeat this process multiple times and take the average,
+# similar to the logistic regression evaluation above. (Not implemented here since the assignment didn’t specify to do so.)
+trainingSet, testSet = divide80_20(examples)
+X_train, y_train = data_convert(trainingSet)
+X_test, y_test = data_convert(testSet)
+# 6 (k = 3)
+tp, fp, tn, fn = KNearestClassify_vec(X_train, y_train, X_test, y_test, 1, 3)
+cv_acc = findK_vec(X_train, y_train, 3, 3, 10, 1)
+acc = accuracy(tp, fp, tn, fn)
+print('k-NN Prediction for Survive with k=3 : ')
+print(f'Cross Validation Accuracies is: {cv_acc}')
+print(f'Predicted Accuracies is: [{acc}]')
+confusionMatrix(tp, fp, tn, fn)
+getStats(tp, fp, tn, fn, toPrint=True)
+# find the proper k value (between 3 and 25)
+acc_per_k = findK_vec(X_train, y_train, 1, 25, 10, 1) # k=1 will not be the best_k, just for collecting accuracies to plot
+max_acc = max(acc_per_k)
+best_k = acc_per_k.index(max_acc) * 2 + 3
+k_tp, k_fp, k_tn, k_fn = KNearestClassify_vec(X_train, y_train, X_test, y_test, 1, best_k)
+k_acc = accuracy(k_tp, k_fp, k_tn, k_fn )
+print('\nUsing n-fold cross validation to find proper k for k-NN Prediction')
+print(f'K for Maximum Accuracy is: {best_k}')
+confusionMatrix(k_tp, k_fp, k_tn, k_fn )
+getStats(k_tp, k_fp, k_tn, k_fn, toPrint=True)
+print(f'\nPredictions with maximum accuracy k: {best_k}')
+print(f'Cross Validation Accuracies is: [{max_acc}]')
+print(f'Predicted Accuracies is: [{k_acc}]')
+# compare n-fold cross validation with real prediction
+realaccuracies = []
+for k in range(1, 25 + 1, 2): 
+    truePos, falsePos, trueNeg, falseNeg = KNearestClassify_vec(X_train, y_train, X_test, y_test, 1, k)
+    realaccuracies.append(accuracy(truePos, falsePos, trueNeg, falseNeg))
+ks = [k for k in range(1, 25 + 1, 2)]
+pylab.plot(ks, acc_per_k, color='steelblue', label='n-fold cross validation')
+pylab.plot(ks, realaccuracies, color='darkorange', label='Real Prediction')
+pylab.title("Average Accuracy vs k (10 folds)")
+pylab.xlabel("k values for kNN regression")
+pylab.ylabel("Accuracy")
+pylab.xticks(ks)
+pylab.legend()
+pylab.show()
+
