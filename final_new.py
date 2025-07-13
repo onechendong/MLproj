@@ -1,4 +1,3 @@
-from gettext import find
 import pylab
 import random
 import math
@@ -444,7 +443,7 @@ def confusionMatrix(truePos, falsePos, trueNeg, falseNeg):
     print('Confusion Matrix is: ', truePos,'\t', falsePos)
     print('                     ', trueNeg,'\t', falseNeg)
     print('                     ', 'TN', '\t', 'FN')    
-    # getStats(truePos, falsePos, trueNeg, falseNeg)
+    getStats(truePos, falsePos, trueNeg, falseNeg, True)
     return
 
 def findK_vec(X, y, minK, maxK, numFolds, label):
@@ -468,6 +467,19 @@ def findK_vec(X, y, minK, maxK, numFolds, label):
         accuracies.append(avg_acc)
     return accuracies
 
+def kNN_gender(gender, data):
+    trainingSet, testSet = divide80_20(data)
+    X_train, y_train = data_convert(trainingSet)
+    X_test, y_test = data_convert(testSet)
+    tp, fp, tn, fn = KNearestClassify_vec(X_train, y_train, X_test, y_test, 1, 3)
+    cv_acc = findK_vec(X_train, y_train, 3, 3, 10, 1)
+    acc = accuracy(tp, fp, tn, fn)
+    print(f'\nFor {gender}: ')
+    print(f'Cross Validation Accuracies is: {cv_acc}')
+    print(f'Predicted Accuracies is: [{acc}]')
+    confusionMatrix(tp, fp, tn, fn)
+    return tp, fp, tn, fn
+
 # --- main ---
 examples = buildTitanicExamples('TitanicPassengers.txt')
 male_data, female_data = gender_split(examples)
@@ -486,7 +498,7 @@ makeClassHist(survived_mdata, not_survived_mdata, 'Male Cabin Classes VS Survive
 makeClassHist(survived_fdata, not_survived_fdata, 'Female Cabin Classes VS Survived'
               , 'Female Cabin Classes', 'Number of Female Passengers')
 
-# --- logis c regression ---
+# --- logistic regression ---
 # 3
 run_results, accuracies_max, best_k_value, mean_accuracy_per_k, ks, mean_weights, mean_intercept = run_1000_trials(examples, 0.65)
 print("\nLogistic Regression:\nAverages for all examples 1000 trials with threshold k=0.5")
@@ -615,11 +627,10 @@ X_test, y_test = data_convert(testSet)
 tp, fp, tn, fn = KNearestClassify_vec(X_train, y_train, X_test, y_test, 1, 3)
 cv_acc = findK_vec(X_train, y_train, 3, 3, 10, 1)
 acc = accuracy(tp, fp, tn, fn)
-print('k-NN Prediction for Survive with k=3 : ')
+print('\nk-NN Prediction for Survive with k=3 : ')
 print(f'Cross Validation Accuracies is: {cv_acc}')
 print(f'Predicted Accuracies is: [{acc}]')
 confusionMatrix(tp, fp, tn, fn)
-getStats(tp, fp, tn, fn, toPrint=True)
 # find the proper k value (between 3 and 25)
 acc_per_k = findK_vec(X_train, y_train, 1, 25, 10, 1) # k=1 will not be the best_k, just for collecting accuracies to plot
 max_acc = max(acc_per_k)
@@ -629,7 +640,6 @@ k_acc = accuracy(k_tp, k_fp, k_tn, k_fn )
 print('\nUsing n-fold cross validation to find proper k for k-NN Prediction')
 print(f'K for Maximum Accuracy is: {best_k}')
 confusionMatrix(k_tp, k_fp, k_tn, k_fn )
-getStats(k_tp, k_fp, k_tn, k_fn, toPrint=True)
 print(f'\nPredictions with maximum accuracy k: {best_k}')
 print(f'Cross Validation Accuracies is: [{max_acc}]')
 print(f'Predicted Accuracies is: [{k_acc}]')
@@ -648,3 +658,14 @@ pylab.xticks(ks)
 pylab.legend()
 pylab.show()
 
+# 7
+print("\nTry to predict male and female separately and combine")
+m_tp, m_fp, m_tn, m_fn = kNN_gender('Male', male_data)
+f_tp, f_fp, f_tn, f_fn = kNN_gender('Female', female_data)
+com_tp = m_tp + f_tp
+com_fp = m_fp + f_fp
+com_tn = m_tn + f_tn
+com_fn = m_fn + f_fn
+com_acc = accuracy(com_tp, com_fp, com_tn, com_fn)
+print('\nCombined Predictions Sttistics: ')
+confusionMatrix(com_tp, com_fp, com_tn, com_fn)
