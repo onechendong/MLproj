@@ -1,0 +1,47 @@
+[1] Logistic Regression Evaluation Notes:
+
+In the logistic regression section, my calculated values for mean specificity
+and mean positive predictive value (ppv) differ slightly from the ones shown
+in the example output.
+
+While reviewing the example results, I noticed two unusual patterns:
+1. All mean specificity values are exactly equal to the mean accuracy.
+2. All mean ppv values are exactly equal to the mean sensitivity.
+
+To achieve case 1, the true negative (TN) count must be significantly higher
+than TP, FN, and FP. However, looking at the label distribution in each subset
+(all, male, female), not all subsets show a dominant number of negative examples.
+So it's unlikely that specificity would consistently match accuracy.
+
+Label distributions in the dataset:
+  Total examples: 1046
+  Positive examples: 427
+  Negative examples: 619
+  Male examples: 658
+  Male positive examples: 135
+  Male negative examples: 523
+  Female examples: 388
+  Female positive examples: 292
+  Female negative examples: 96
+
+To achieve case 2, we would need TP >> FN and FP, which would push both
+sensitivity and ppv close to 1. However, the example output includes very
+low ppv values (e.g., 0.081), which contradicts that scenario.
+
+Given these inconsistencies, I reasonably suspect that in the example output
+for logistic regression, there might have been a mistake when calculating
+specificity and ppv—perhaps the accuracy and sensitivity values were printed
+in place of the correct ones by accident.
+
+------
+
+[2] k-Nearest Neighbors (k-NN) Evaluation Notes:
+
+This section only performs a single 80/20 train-test split, so the results may 
+vary quite a bit.
+Given the small dataset size (~1046 examples), a single split might not reflect 
+the model’s true performance.
+For more reliable results, it would be better to repeat this process multiple 
+times and take the average, similar to the logistic regression evaluation above. 
+(Not implemented here since the assignment didn’t specify to do so.)
+
