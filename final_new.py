@@ -205,8 +205,10 @@ def divide80_20(examples):
     return trainingSet, testSet 
 
 def mean_confidence_interval(data):
-    mean = sum(data)/len(data)
-    std = stdDev(data)
+    # filter out nan value
+    filtered_data = [x for x in data if not math.isnan(x)]
+    mean = sum(filtered_data)/len(filtered_data)
+    std = stdDev(filtered_data)
     # ci = 1.96 * (std / len(data)**0.5)
     ci = 1.96 * std
     return mean, ci
@@ -356,6 +358,9 @@ def iScaleExamples(examples):
 def run_1000_trials(examples, kMax):
     weights_list = [[], [], [], [], []]
     intercepts, accuracies, sensitivities, specificities,ppvs, aurocs = [], [], [], [], [], []
+    # # test
+    # tps, fps, tns, fns = [], [], [], []
+    # # test
     ks = [round(0.5 + t * (kMax - 0.5) / 999, 5) for t in range(1000)]
     accuracies_max, best_k_value = [], []
     accuracy_per_k = [[] for _ in range(1000)]
@@ -368,6 +373,12 @@ def run_1000_trials(examples, kMax):
         X_test, y_test = data_convert(test)
         model = sklearn.linear_model.LogisticRegression().fit(X_train, y_train)
         truePos, falsePos, trueNeg, falseNeg = applyModel(model, X_test, y_test, 1, 0.5)
+        # # test
+        # tps.append(truePos)
+        # fps.append(falsePos)
+        # tns.append(trueNeg)
+        # fns.append(falseNeg)
+        # # test
 
         accuracies_diff_k = []
         for idx, k in enumerate(ks):
@@ -396,6 +407,13 @@ def run_1000_trials(examples, kMax):
     for acc_list in accuracy_per_k:
         mean_accuracy_per_k.append(sum(acc_list)/len(acc_list))
 
+    # # test
+    # mean_tp = sum(tps) / len(tps)
+    # mean_fp = sum(fps) / len(fps)
+    # mean_tn = sum(tns) / len(tns)
+    # mean_fn = sum(fns) / len(fns)
+    # print(f"\n####### mean_tp = {mean_tp}, mean_fp = {mean_fp}, mean_tn = {mean_tn}, mean_fn = {mean_fn} #######\n")
+    # #test
     results = {}
     feature_names = ['C1', 'C2', 'C3', 'age', 'gender']
     for i in range(5):
@@ -485,6 +503,15 @@ examples = buildTitanicExamples('TitanicPassengers.txt')
 male_data, female_data = gender_split(examples)
 survived_mdata, not_survived_mdata = survived_split(male_data)
 survived_fdata, not_survived_fdata = survived_split(female_data)
+# print(f"Total examples: {len(examples)}")
+# print(f"Positive examples: {sum(1 for e in examples if e.getLabel() == 1)}")
+# print(f"Negative examples: {sum(1 for e in examples if e.getLabel() == 0)}")
+# print(f"Male examples: {len(male_data)}")
+# print(f"Male positive examples: {len(survived_mdata)}")
+# print(f"Male negative examples: {len(not_survived_mdata)}")
+# print(f"Female examples: {len(female_data)}")
+# print(f"Female positive examples: {len(survived_fdata)}")
+# print(f"Female negative examples: {len(not_survived_fdata)}")
 
 # Survived Male/Female Passengers VS Ages
 makeHist(male_data, survived_mdata, not_survived_mdata, 20, 'Survived Male Passengers VS Ages'
@@ -615,11 +642,6 @@ plot_mean_roc_curve(if_mean_weights, if_mean_intercept, i_female_data, '(iScalin
 
 
 # --- kNN ---
-# Note:
-# This section only performs a single 80/20 train-test split, so the results may vary quite a bit.
-# Given the small dataset size (~1046 examples), a single split might not reflect the model’s true performance.
-# For more reliable results, it would be better to repeat this process multiple times and take the average,
-# similar to the logistic regression evaluation above. (Not implemented here since the assignment didn’t specify to do so.)
 trainingSet, testSet = divide80_20(examples)
 X_train, y_train = data_convert(trainingSet)
 X_test, y_test = data_convert(testSet)
@@ -634,7 +656,7 @@ confusionMatrix(tp, fp, tn, fn)
 # find the proper k value (between 3 and 25)
 acc_per_k = findK_vec(X_train, y_train, 1, 25, 10, 1) # k=1 will not be the best_k, just for collecting accuracies to plot
 max_acc = max(acc_per_k)
-best_k = acc_per_k.index(max_acc) * 2 + 3
+best_k = acc_per_k.index(max_acc) * 2 + 1
 k_tp, k_fp, k_tn, k_fn = KNearestClassify_vec(X_train, y_train, X_test, y_test, 1, best_k)
 k_acc = accuracy(k_tp, k_fp, k_tn, k_fn )
 print('\nUsing n-fold cross validation to find proper k for k-NN Prediction')
