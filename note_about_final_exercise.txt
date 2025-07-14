@@ -1,3 +1,19 @@
+From both the logistic regression weights and k-NN results, we can observe some patterns:
+
+1. Passengers in 1st class (C1) had much higher survival chances. This is 
+reflected in consistently positive and strong weights for the C1 feature.
+
+2. Younger passengers were slightly more likely to survive.
+
+3. Gender plays a significant role — females had a much higher survival rate. 
+This shows up clearly in the confusion matrix of k-NN and in logistic 
+regression where gender contributes to model separation.
+
+4. For males, the model mostly predicts "not survived", leading to very high 
+specificity but low sensitivity (i.e., it rarely predicts survival correctly).
+
+----------
+
 [1] Logistic Regression Evaluation Notes:
 
 In the logistic regression section, my calculated values for mean specificity
